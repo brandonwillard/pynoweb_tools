@@ -23,7 +23,7 @@ from pandocfilters import (
 graphics_pattern = re.compile(
     r"includegraphics(?:\[.+\])?\{(.*?(\w+)(\.\w*))\}")
 
-# TODO: Should get from `meta` parameter in the filter.
+# FIXME: Should get from `meta` parameter in the filter.
 graphics_path = r'{attach}/articles/figures/'
 
 image_pattern = re.compile(r"(.*?(\w+)(\.\w*))$")
@@ -33,7 +33,7 @@ env_pattern = re.compile(
 
 label_pattern = re.compile(r'(\s*?\\label\{(\w*?:?\w+)\})')
 
-# TODO: Should get from `meta` parameter in the filter?
+# FIXME: Should get from `meta` parameter in the filter?
 environment_conversions = {'Exa': 'example'}
 
 environment_counters = {}
@@ -61,8 +61,12 @@ def latex_prefilter(key, value, oformat, meta, *args, **kwargs):
 
     # TODO: Describe more.
 
+    # XXX: This filter does some questionable recursive calling at the
+    # shell level.
+
     Parameters
     ==========
+    TODO: Document parameters.
 
     """
     # sys.stderr.write("Filter args: {}, {}, {}, {}\n".format(
@@ -150,7 +154,7 @@ def latex_prefilter(key, value, oformat, meta, *args, **kwargs):
             # TODO: Should we evaluate nested environments?
             env_body = pypandoc.convert_text(env_body, 'json',
                                              format='latex',
-                                             filters=['./pandoc_latex_prefilter.py']
+                                             filters=['PynowebFilter']
                                              )
 
             div_block = json.loads(env_body)[1]
