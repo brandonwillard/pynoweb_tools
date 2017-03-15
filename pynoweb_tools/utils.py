@@ -5,6 +5,8 @@ import glob
 def weave_retry_cache(pweb_formatter):
     r''' Catch cache issues and start fresh when they're found.
 
+    TODO: Just create new processors?
+
     Parameters
     ==========
     pweb_formatter: Pweb

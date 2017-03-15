@@ -1,9 +1,4 @@
-from pweave import (
-    Pweb,
-    PwebTexFormatter,
-    PwebIPythonProcessor,
-    PwebFormats,
-    PwebProcessors)
+from pweave import Pweb, PwebTexFormatter
 
 
 class PwebMintedPandocFormatter(PwebTexFormatter):
@@ -11,16 +6,37 @@ class PwebMintedPandocFormatter(PwebTexFormatter):
 
     TODO: Describe changes to figure handling.
     """
+    def __init__(self, *args, **kwargs):
+        self.after_code_newline = kwargs.pop('after_code_newline', True)
+        self.after_output_newline = kwargs.pop('after_output_newline', False)
+        self.after_term_newline = kwargs.pop('after_term_newline', True)
+
+        self.minted_code_chunk_options = kwargs.pop(
+            'minted_code_chunk_options', 'mathescape,xleftmargin=0.5em')
+        self.minted_output_chunk_options = kwargs.pop(
+            'minted_code_chunk_options',
+            'xleftmargin=0.5em,mathescape,frame=leftline')
+        self.minted_term_chunk_options = kwargs.pop(
+            'minted_code_chunk_options',
+            'xleftmargin=0.5em,mathescape')
+
+        self.minted_output_id = kwargs.pop('minted_output_id', 'output')
+        super(PwebMintedPandocFormatter, self).__init__(*args, **kwargs)
+
     def initformat(self):
         self.formatdict = dict(
-            codestart=(r'\begin{minted}[mathescape, xleftmargin=0.5em]{%s}'),
-            codeend='\end{minted}\n',
-            outputstart=(r'\begin{minted}[xleftmargin=0.5em'
-                         r', mathescape, frame = leftline]{text}'),
-            outputend='\end{minted}\n',
-            termstart=(r'\begin{minted}[xleftmargin=0.5em, '
-                       r'mathescape]{%s}'),
-            termend='\end{minted}\n',
+            codestart=(r'\begin{{minted}}[{}]{{%s}}'.format(
+                self.minted_code_chunk_options)),
+            codeend=r'\end{minted}' + (
+                '\n' if self.after_code_newline else ''),
+            outputstart=(r'\begin{{minted}}[{}]{{{}}}'.format(
+                self.minted_output_chunk_options, self.minted_output_id)),
+            outputend=r'\end{minted}' + (
+                '\n' if self.after_output_newline else ''),
+            termstart=(r'\begin{{minted}}[{}]{{%s}}'.format(
+                self.minted_term_chunk_options)),
+            termend=r'\end{minted}' + (
+                '\n' if self.after_term_newline else ''),
             figfmt='.png',
             extension='tex',
             width='',
@@ -70,48 +86,9 @@ class PwebMintedPandocFormatter(PwebTexFormatter):
         return result
 
 
-class PwebIPythonExtProcessor(PwebIPythonProcessor):
-    r""" A processor that runs code chunks in the current Ipython session.
-    If there isn't one, then it creates one.
-
-    TODO: This is rather old; the newer Jupyter processor might be sufficient?
-    """
-
-    def __init__(self, *args, **kwargs):
-        super(PwebIPythonExtProcessor, self).__init__(*args, **kwargs)
-        import IPython
-
-        self.IPy = IPython.get_ipython()
-        if self.IPy is None:
-            x = IPython.core.interactiveshell.InteractiveShell()
-            self.IPy = x.get_ipython()
-
-        self.prompt_count = 1
-
-    #def loadstring(self, code, **kwargs):
-    #    tmp = StringIO()
-    #    sys.stdout = tmp
-    #    self.IPy.run_cell('%%cache code)
-    #    result = "\n" + tmp.getvalue()
-    #    tmp.close()
-    #    sys.stdout = self._stdout
-    #    return result
-
-
-PwebProcessors.formats.update({'ipython_ext':
-                               {'class': PwebIPythonExtProcessor,
-                                'description':
-                                ('IPython shell that uses'
-                                 ' an existing IPython instance')
-                                }})
-
-
 class PwebMintedPandoc(Pweb):
 
     def __init__(self, *args, **kwargs):
-        #self.destination = kwargs.get('output', None)
-        #if self.destination is not None:
-        #    self.destination = os.path.abspath(self.destination)
         docmode = kwargs.pop('docmode', None)
 
         super(PwebMintedPandoc, self).__init__(*args, **kwargs)
@@ -121,8 +98,3 @@ class PwebMintedPandoc(Pweb):
         #                         os.path.basename(self._basename()) + '.' +
         #                         self.formatter.getformatdict()['extension'])
         self.documentationmode = docmode
-
-PwebFormats.formats.update({'pweb_minted_pandoc': {
-    'class': PwebMintedPandocFormatter,
-    'description': ('Minted environs with Pandoc and Pelican'
-                    ' figure output considerations')}})

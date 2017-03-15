@@ -5,7 +5,7 @@ from pweave import rcParams
 
 from pandocfilters import toJSONFilter
 
-from .pweave_objs import PwebMintedPandoc
+from .pweave_objs.formatters import PwebMintedPandoc
 from .utils import weave_retry_cache
 from .pandoc_utils import latex_prefilter
 
@@ -14,14 +14,15 @@ def weave():
     r""" This provides a callable script that mimics the `Pweave` command but
     uses our specially purposed Pandoc formatter and cache retry wrapper.
 
-    TODO: Much of this isn't needed anymore, so refactor.
+    TODO: Much of this isn't needed anymore, so refactor.  Especially
+    since the retry stuff should just be in a `Pweave.Processor`.
     """
 
     if len(sys.argv) == 1:
-        print("Enter PweaveExt -h for help")
+        print("Enter PynowebWeave -h for help")
         sys.exit()
 
-    parser = OptionParser(usage="PweaveExt [options] sourcefile")
+    parser = OptionParser(usage="PynowebWeave [options] sourcefile")
     parser.add_option("-d", "--documentation-mode",
                       dest="docmode",
                       action="store_true",
@@ -44,7 +45,7 @@ def weave():
                       help="Path and filename for output file")
     parser.add_option("-s", "--shell",
                       dest="shell",
-                      default="ipython",
+                      default="ipython_ext",
                       help="Shell in which to process python")
 
     (options, args) = parser.parse_args()
@@ -59,6 +60,7 @@ def weave():
     # set some global options
     rcParams['figdir'] = opts_dict.pop('figdir', None)
     rcParams['storeresults'] = opts_dict.pop('cache', None)
+    rcParams["chunk"]["defaultoptions"].update({'wrap' : False})
     # rcParams['chunk']['defaultoptions']['engine'] = 'ipython'
     shell_opt = opts_dict.pop('shell')
 
@@ -77,7 +79,5 @@ def latex_json_filter():
     functionality.
 
     .. see: pandoc_utils.latex_prefilter
-
-    FYI: Use `#!/usr/bin/env python` to handle virtualenvs.
     """
     toJSONFilter(latex_prefilter)

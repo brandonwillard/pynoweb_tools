@@ -1,12 +1,11 @@
 r"""
 About
 =====
-Custom extensions and helper functions for Pweave.
+Custom extensions and helper functions for noweb files using Pweave and Pandoc.
 
 .. moduleauthor:: Brandon T. Willard <brandonwillard@gmail.com>
 """
 from __future__ import absolute_import
-from .pweave_objs import *
 
 VERSION = (0, 0, 1)
 

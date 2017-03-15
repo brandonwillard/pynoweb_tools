@@ -1,6 +1,6 @@
 import neovim
 import os
-from .pweave_objs import PwebMintedPandoc
+from .pweave_objs.formatters import PwebMintedPandoc
 from .utils import weave_retry_cache
 
 
@@ -42,7 +42,6 @@ def nvim_weave(outext="tex",
     nvim = neovim.attach('socket', path=os.getenv("NVIM_LISTEN_ADDRESS"))
     currbuf = nvim.current.buffer
 
-    # here's a Pweave weave script...
     from pweave import rcParams
 
     project_dir, input_file = os.path.split(currbuf.name)
