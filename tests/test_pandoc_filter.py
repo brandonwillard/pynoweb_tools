@@ -21,7 +21,91 @@ TODO FIXME: Rewrite all tests using calls like:
 import os
 
 # import pytest
+import pandocfilters
 import pypandoc
+
+
+def debug_example():
+
+    # pypandoc.__pandoc_path = '/home/bwillar0/.cabal/bin/pandoc'
+
+    test_file = r'''
+    \begin{document}
+    %\graphicspath{{/tmp/bwillar0/}{../figures/}{./figures/}{./}}
+    %\ref{fig:figure_with_label}
+
+    \begin{figure}[htpb]
+        %\center
+        \includegraphics{figure_with_label.png}
+        \caption{A figure caption!}
+        \label{fig:figure_with_label}
+    \end{figure}
+
+    %\ref{fig:figure_with_label}
+
+    \end{document}
+    '''
+
+    test_filename = '/home/bwillar0/projects/websites/brandonwillard.github.io/content/articles/src/more_proximal_estimation.tex'
+    with open(test_filename, 'r') as f:
+        test_file = ''.join(f.readlines())
+
+    # For better filter debugging:
+    json_res = pypandoc.convert_text(test_file,
+                                     'json',
+                                     format='latex',
+                                     extra_args=('-s', '-R',
+                                                 '--wrap=none',
+                                                 '--metadata=bibliography=/home/bwillar0/projects/websites/brandonwillard.github.io/content/articles/src/more-proximal-estimation.bib'),
+                                     filters=['pandoc-citeproc',
+                                              'PynowebFilter'],
+                                     )
+
+    import json
+    json_json_res = json.loads(json_res)
+
+    # filter_res = json.dumps(json_json_res)
+
+    # Apply our filter...
+    import pynoweb_tools.pandoc_utils
+    # Make sure we clear out the global(s)...
+    pynoweb_tools.pandoc_utils.processed_figures = dict()
+    from pynoweb_tools.pandoc_utils import latex_prefilter
+    filter_res = pandocfilters.applyJSONFilters(
+        [latex_prefilter], json_res, format='json')
+
+    filter_json_res = json.loads(filter_res)
+
+    # Change some things...
+    # Say we get a Pandoc error message with:
+    #   $.blocks[47].c[1][0].c[1][0]
+    problem_item = filter_json_res['blocks'][47]['c'][1][0]['c'][1][0]
+
+    # problem_item['c'][0] = [u"pg_ls_plot", [], []]
+    # problem_item['c'][1] = []
+    # problem_item['c'][1] = [problem_item['c'][1]]
+
+    # Hand-craft a test object...
+    # from pandocfilters import (Math, Image, Div, RawInline, Span)
+    # filter_json_res = {'blocks': [Para([Span(['blah', [], []], [Str('hi')])])],
+    #                    'meta': {}, 'pandoc-api-version': [1, 17, 0, 5]}
+    # filter_res = json.dumps(filter_json_res)
+
+    html_res = pypandoc.convert_text(filter_res,
+                                     'markdown_github+markdown_in_html_blocks+mmd_title_block+tex_math_dollars+tex_math_double_backslash+implicit_figures+citations+yaml_metadata_block+link_attributes+raw_html+raw_tex',
+                                     format='json',
+                                     extra_args=(
+                                         '-s', '-R',
+                                         '--wrap=none', '--verbose'
+                                     )
+                                     )
+
+    print(html_res)
+
+    # Old way:
+    #   with open('test_file.tex', 'w') as f:
+    #       f.write(test_file)
+    #   !pandoc -s -R -f latex --verbose -t markdown --filter=PynowebFilter test_file.tex
 
 
 def test_eqref():
@@ -93,17 +177,22 @@ def test_fig():
     test_file_fig = r'''
     \begin{document}
     \graphicspath{{/tmp/bwillar0/}{../figures/}{./figures/}{./}}
+
+    \ref{fig:figure_with_label}
+
     \begin{figure}[htpb]
         \center
-        \includegraphics{figure_with_label.png}
+        \includegraphics[width=\linewidth]{figure_with_label.png}
         \caption{A figure caption!}
         \label{fig:figure_with_label}
     \end{figure}
 
+    \ref{fig:figure_with_label}
+
     \begin{figure}
         \centering
         {\includegraphics[width=2.5in]{figure_without_label.png}}
-        \\caption{Another figure caption!}
+        \caption{Another figure caption!}
     \end{figure}
     '''
     test_file_fig += r'''
@@ -115,18 +204,21 @@ def test_fig():
 
     # print(test_file_fig)
 
-    extra_args = ('-s', '-R', '--wrap=none')
+    extra_args = ('-s', '-R', '--wrap=none', '--verbose', '--trace')
     # metadata = r'figure_dir=/tmp/figures'
     metadata = r'figure_dir={attach}/articles/figures/'
     extra_args += (r'--metadata={}'.format(metadata),)
+
+    md_exts = ['+implicit_figures',
+               '+link_attributes',
+               '+markdown_in_html_blocks'
+               ]
     pandoc_res = pypandoc.convert_text(test_file_fig,
-                                       'markdown',
+                                       'markdown' + ''.join(md_exts),
                                        format='latex',
                                        extra_args=extra_args,
                                        filters=['PynowebFilter']
                                        )
-
-    # print(pandoc_res)
 
     figure_str = (r'![A figure caption!<span data-label='
                   r'"fig:figure_with_label"></span>]'

@@ -60,7 +60,7 @@ def weave():
     # set some global options
     rcParams['figdir'] = opts_dict.pop('figdir', None)
     rcParams['storeresults'] = opts_dict.pop('cache', None)
-    rcParams["chunk"]["defaultoptions"].update({'wrap' : False})
+    rcParams["chunk"]["defaultoptions"].update({'wrap': False})
     # rcParams['chunk']['defaultoptions']['engine'] = 'ipython'
     shell_opt = opts_dict.pop('shell')
 

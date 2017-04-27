@@ -5,7 +5,6 @@ from copy import copy
 import logging
 
 import json
-from collections import Iterable
 from functools import reduce
 
 import pypandoc
@@ -13,17 +12,16 @@ import pypandoc
 # See https://hackage.haskell.org/package/pandoc-1.17.2
 # and https://hackage.haskell.org/package/pandoc-types-1.16.1.1 for
 # definitions.
-from pandocfilters import (
-    Math,
-    Image,
-    Div,
-    Str,
-    Plain,
-    RawInline,
-    RawBlock)
+# Or simply `cabal get pandoc-types -d /tmp` and look at the source.
+from pandocfilters import (Str, Math, Image, Div, RawInline, Span, Para)
 
 
-logging.basicConfig(level=logging.DEBUG)
+# logging.basicConfig(level=logging.DEBUG)
+logging.basicConfig(
+    filename='pandoc_utils_log.out',
+    filemode='w',
+    level=logging.DEBUG)
+
 
 gpath_pattern_1 = r'\\graphicspath\{(.+)\}'
 gpath_pattern_1 = re.compile(gpath_pattern_1)
@@ -45,11 +43,71 @@ environment_counters = {}
 
 preserved_tex = ['\\eqref', '\\ref', '\\Cref', '\\cref', '\\includegraphics']
 
-# TODO: Automatically track and replace \[Cc]ref with \[eq]ref.
-preserved_conversions = {'\\cref': '\\ref',
-                         '\\Cref': '\\ref'}
+cleveref_dict = {r'fig:': (r'Figure~', ''),
+                 r'eq:': (r'Equation~', r'eq'),
+                 r'thm:': (r'Theorem~', r'eq'),
+                 r'cor:': (r'Corollary~', r'eq'),
+                 r'lem:': (r'Lemma~', r'eq'),
+                 r'prop:': (r'Proposition~', ''),
+                 r'exa:': (r'Example~', ''),
+                 r'sec:': (r'Section~', ''),
+                 }
 
+cleveref_re = re.compile(
+    r'\\[Cc]ref{{\s*({})?'.format('|'.join(cleveref_dict.keys())))
+
+
+def cleveref_sub(ma):
+    key, = ma.groups()
+    if key is None:
+        key = ''
+    prefix, ref_prefix = cleveref_dict.get(key, ('', ''))
+
+    return r'{}\{}ref{{{}'.format(prefix, ref_prefix, key)
+
+
+def cleveref_ast_sub(source):
+    res = []
+    sub_res = cleveref_re.sub(cleveref_sub, source)
+    try:
+        prefix_str, ref_str = sub_res.split('~')
+        res += [Str(prefix_str + u'\xa0')]
+    except:
+        ref_str = sub_res
+
+    res += [Math({'t': 'InlineMath', 'c': []}, ref_str)]
+    return res
+
+
+r""" Dictionary of custom inline math elements to preserve.
+
+Elements with callable values must consist of functions that
+take the string to convert, elements with with string values
+(all keys should be strings, too) will call `str.replace`
+with key and value as arguments.
+In the former case, the return result must be a list of Pandoc
+AST objects.
+"""
+custom_inline_math = {'cleveref': cleveref_ast_sub}
+
+r""" Figure directories to search.
+
+These are a combination of the meta data values and any
+processed LaTeX `\graphicspath` directives.
+"""
 figure_dirs = set()
+
+r""" Dictionary of processed AST Image objects.
+
+The keys are the replaced/updated image filenames, the values
+are lists with two elements: a string LaTeX label for the image,
+and the figure number.
+"""
+processed_figures = dict()
+
+r""" Figure filename extensions.
+"""
+fig_fname_ext = None
 
 
 def rename_find_fig(fig_name,
@@ -67,16 +125,207 @@ def rename_find_fig(fig_name,
         new_fig_fname = os.path.extsep.join([new_fig_fname,
                                              fig_ext])
 
-    # See if we can find the file in one of the dirs
-    if isinstance(fig_dirs, Iterable):
+    # XXX: We assume that `fig_dirs` is a collection.
+    # See if we can find the file in one of the dirs.
+    # Otherwise, if there's only one item in the collection,
+    # use that (i.e. no check).
+    if len(fig_dirs) == 1:
+        fig_dir, = fig_dirs
+        new_fig_fname = os.path.join(fig_dir, new_fig_fname)
+    else:
         fig_files = map(lambda x: os.path.join(x, new_fig_fname),
                         fig_dirs)
         real_fig_files = filter(os.path.exists, fig_files)
-        new_fig_fname = next(real_fig_files, new_fig_fname)
-    else:
-        new_fig_fname = os.path.join(fig_dirs, new_fig_fname)
+        new_fig_fname = next(iter(real_fig_files), new_fig_fname)
 
     return new_fig_fname
+
+
+def label_to_mathjax(env_label, label_postfix='_span', env_tag=None):
+    r""" Replace labels with MathJax-based hack that
+    preserves LaTeX-like functionality and rendering.
+
+    This works by creating a hidden Span with a labeled dummy
+    MathJax equation environment.  References like `\ref{env_label}`
+    will then automatically resolve to the containing Div.
+
+    Arguments
+    =========
+    env_label: str
+        The label token (i.e. `\label{env_label}`).
+    label_postfix: str (Optional)
+        String to append to the generated Span's id
+        (env_label + label_postfix).
+    env_tag: int (Optional)
+        Tag for the labeled content (e.g. equation number).
+
+    Returns
+    =======
+    The Para(Span) AST object that links to our label (i.e.
+    the new MathJax "label" object).
+    """
+    hack_span_id = env_label + label_postfix
+
+    # This is how we're hijacking MathJax's numbering system:
+    ref_hack = r'$$\begin{equation}'
+    if env_tag is not None:
+        ref_hack += r'\tag{{{}}}'.format(env_tag)
+    ref_hack += r'\label{{{}}}'.format(env_label)
+    ref_hack += r'\end{equation}$$'
+
+    # Hide the display of our equation hack in a Span:
+    label_div = Span([hack_span_id, [],
+                      [["style", "display:none;visibility:hidden"]]
+                      ],
+                     [RawInline('latex', ref_hack)])
+
+    return label_div
+
+
+def process_image(key, value, oformat, meta):
+    r''' Rewrite filename in Image AST object--adding paths from the
+    meta information and/or LaTeX `\graphicspaths` directive.
+
+    This can be used to reassign paths to image file names when the
+    meta information has only one entry.  It will also wrap
+    LaTeX-labeled Image objects in a Span--for later
+    referencing/linking, say.
+    '''
+    if key != "Image":
+        return None
+
+    global figure_dirs, fig_fname_ext, processed_figures
+
+    # TODO: Find and use labels.
+    # TODO: Perhaps check that it's a valid file?
+    new_value = copy(value[2])
+
+    new_fig_fname = rename_find_fig(new_value[0],
+                                    figure_dirs,
+                                    fig_fname_ext)
+
+    logging.debug("figure_dirs: {}\tfig_fname_ext: {}\n".format(
+        figure_dirs, fig_fname_ext))
+    logging.debug("new_value: {}\tnew_fig_fname: {}\n".format(
+        new_value, new_fig_fname))
+
+    # XXX: Avoid an endless loop of Image replacements.
+    if new_fig_fname in processed_figures.keys():
+        return None
+
+    processed_figures[new_fig_fname] = [None, None]
+
+    new_value[0] = new_fig_fname
+
+    # Wrap the image in a div with an `id`, so that we can
+    # reference it in HTML.
+    new_image = Image(value[0], value[1], new_value)
+    wrapped_image = new_image
+    try:
+        fig_label_obj = value[1][-1]['c'][0][-1][0]
+
+        logging.debug("fig_label_obj: {}\n".format(fig_label_obj))
+
+        if fig_label_obj[0] == 'data-label':
+            fig_label = fig_label_obj[1]
+
+            processed_figures[new_fig_fname][0] = fig_label
+            env_num = len(processed_figures)
+            processed_figures[new_fig_fname][1] = env_num
+
+            hack_span = label_to_mathjax(fig_label, env_tag=env_num)
+
+            wrapped_image = Span([copy(fig_label), [], []],
+                                 [hack_span, new_image])
+    except:
+        pass
+
+    logging.debug("wrapped_image: {}\n".format(wrapped_image))
+
+    return [wrapped_image]
+
+
+def process_latex_envs(key, value, oformat, meta):
+    r''' Check LaTeX RawBlock AST objects for environments (i.e.
+    `\begin{env_name}` and `\end{env_name}`) and converts
+    them to Div's with class attribute set to their LaTeX names
+    (i.e. `env_name`).
+
+    The new Div has a `markdown` attribute set so that its contents
+    can be processed again by Pandoc.  This is needed for custom environments
+    (e.g. and example environment with more text and math to be processed),
+    which also means that *recursive Pandoc calls are needed* (since Pandoc
+    already stopped short producing the RawBlocks we start with).
+    For the recursive Pandoc calls to work, we need the Pandoc extension
+    `+markdown_in_html_blocks` enabled, as well.
+    '''
+
+    if key != 'RawBlock' or value[0] != 'latex':
+        return None
+
+    global environment_counters
+
+    env_info = env_pattern.search(value[1])
+    if env_info is not None:
+        env_groups = env_info.groups()
+        env_name = env_groups[0]
+        env_name = env_conversions.get(env_name, env_name)
+        env_title = env_groups[1]
+
+        if env_title is None:
+            env_title = ""
+
+        env_body = env_groups[2]
+
+        env_num = environment_counters.get(env_name, 0)
+        env_num += 1
+        environment_counters[env_name] = env_num
+
+        label_info = label_pattern.search(env_body)
+        env_label = ""
+        label_div = None
+        if label_info is not None:
+            env_label = label_info.group(2)
+            label_div = label_to_mathjax(env_label, env_tag=env_num)
+
+            # XXX: For the Pandoc-types we've been using, there's
+            # a strict need to make Div values Block elements and not
+            # Inlines, which Span is.  We wrap the Span in Para to
+            # produce the requisite Block value.
+            label_div = Para([label_div])
+
+            # Now, remove the latex label string from the original
+            # content:
+            env_body = env_body.replace(label_info.group(1), '')
+
+        # Div AST objects:
+        # type Attr = (String, [String], [(String, String)])
+        # Attributes: identifier, classes, key-value pairs
+        div_attr = [env_label, [env_name], [['markdown', ''],
+                                            ["env-number", str(env_num)],
+                                            ['title-name', env_title]
+                                            ]]
+
+        # TODO: Should we evaluate nested environments?
+        env_body = pypandoc.convert_text(env_body, 'json',
+                                         format='latex',
+                                         filters=['PynowebFilter']
+                                         )
+
+        logging.debug(u"env_body: {}\n".format(env_body))
+
+        div_blocks = json.loads(env_body)['blocks']
+
+        if label_div is not None:
+            div_blocks = [label_div] + div_blocks
+
+        div_res = Div(div_attr, div_blocks)
+
+        logging.debug("div_res: {}\n".format(div_res))
+
+        return div_res
+    else:
+        return []
 
 
 def latex_prefilter(key, value, oformat, meta, *args, **kwargs):
@@ -103,15 +352,16 @@ def latex_prefilter(key, value, oformat, meta, *args, **kwargs):
     TODO: Document parameters.
 
     """
-    logging.debug(("Filter key:{}, value:{}, meta:{},"
-                   "args:{}, kwargs:{}\n").format(
-                       key, value, meta, args, kwargs))
+    # logging.debug((u"Filter key:{}, value:{}, meta:{},"
+    #                "args:{}, kwargs:{}\n").format(
+    #                    key, value, meta, args, kwargs))
 
-    global preserved_conversions, preserved_tex, env_conversions, figure_dirs
+    global custom_inline_math, preserved_tex,\
+        env_conversions, figure_dirs, fig_fname_ext
 
-    preserved_conversions = preserved_conversions.copy()
-    preserved_conversions.update(meta.get(
-        'preserved_conversions', {}).get('c', {}))
+    custom_inline_math = custom_inline_math.copy()
+    custom_inline_math.update(meta.get(
+        'custom_inline_math', {}).get('c', {}))
 
     env_conversions = env_conversions.copy()
     env_conversions.update(meta.get(
@@ -122,9 +372,6 @@ def latex_prefilter(key, value, oformat, meta, *args, **kwargs):
     figure_dir_meta = meta.get('figure_dir', {}).get('c', None)
     if figure_dir_meta is not None:
         figure_dirs.add(figure_dir_meta)
-
-    logging.debug("figure_dir_meta: {}\tfigure_dirs: {}\n".format(
-        figure_dir_meta, figure_dirs))
 
     fig_fname_ext = meta.get('figure_ext', {}).get('c', None)
 
@@ -141,10 +388,18 @@ def latex_prefilter(key, value, oformat, meta, *args, **kwargs):
 
             new_value = reduce(repstep, figure_files, new_value)
 
-            for from_, to_ in preserved_conversions.items():
-                new_value = new_value.replace(from_, to_)
+            logging.debug("figure_files: {}\tnew_value: {}\n".format(
+                figure_files, new_value))
 
-            return Math({'t': 'InlineMath', 'c': []}, new_value)
+            for from_, to_ in custom_inline_math.items():
+                if callable(to_):
+                    new_value = to_(new_value)
+                else:
+                    new_value = new_value.replace(from_, to_)
+                    new_value = [Math({'t': 'InlineMath', 'c': []},
+                                      new_value)]
+
+            return new_value
         else:
             # Check for `\graphicspaths` commands to parse for
             # new paths.
@@ -159,16 +414,7 @@ def latex_prefilter(key, value, oformat, meta, *args, **kwargs):
 
     elif key == "Image":
 
-        # TODO: Find and use labels.
-        # TODO: Perhaps check that it's a valid file?
-        new_value = copy(value[2])
-
-        new_fig_fname = rename_find_fig(new_value[0],
-                                        figure_dirs,
-                                        fig_fname_ext)
-        new_value[0] = new_fig_fname
-
-        return Image(value[0], value[1], new_value)
+        return process_image(key, value, oformat, meta)
 
     elif key == "Math" and value[0]['t'] == "DisplayMath":
 
@@ -183,67 +429,7 @@ def latex_prefilter(key, value, oformat, meta, *args, **kwargs):
 
     if key == 'RawBlock' and value[0] == 'latex':
 
-        env_info = env_pattern.search(value[1])
-        if env_info is not None:
-            env_groups = env_info.groups()
-            env_name = env_groups[0]
-            env_name = env_conversions.get(env_name, env_name)
-            env_title = env_groups[1]
-
-            if env_title is None:
-                env_title = ""
-
-            env_body = env_groups[2]
-
-            env_num = environment_counters.get(env_name, 0)
-            env_num += 1
-            environment_counters[env_name] = env_num
-
-            label_info = label_pattern.search(env_body)
-            env_label = ""
-            label_div = None
-            if label_info is not None:
-                env_label = label_info.group(2)
-
-                hack_div_label = env_label+"_math"
-                # XXX: We're hijacking MathJax's numbering system.
-                ref_hack = (r'$$\begin{{equation}}'
-                            r'\tag{{{}}}'
-                            r'\label{{{}}}'
-                            r'\end{{equation}}$$'
-                            ).format(env_num, env_label)
-
-                label_div = Div([hack_div_label, [],
-                                 [#['markdown', ''],
-                                  ["style",
-                                   "display:none;visibility:hidden"]]],
-                                [RawBlock('latex', ref_hack)])
-
-                # Now, remove the latex label string
-                env_body = env_body.replace(label_info.group(1), '')
-
-
-            # type Attr = (String, [String], [(String, String)])
-            # Attributes: identifier, classes, key-value pairs
-            div_attr = [env_label, [env_name], [['markdown', ''],
-                                                ["env-number", str(env_num)],
-                                                ['title-name', env_title]
-                                                ]]
-
-            # TODO: Should we evaluate nested environments?
-            env_body = pypandoc.convert_text(env_body, 'json',
-                                             format='latex',
-                                             filters=['PynowebFilter']
-                                             )
-
-            div_block = json.loads(env_body)[1]
-
-            if label_div is not None:
-                div_block = [label_div] + div_block
-
-            return Div(div_attr, div_block)
-        else:
-            return []
+        return process_latex_envs(key, value, oformat, meta)
 
     elif "Raw" in key:
         return []

@@ -9,7 +9,8 @@ def nvim_weave(outext="tex",
                pweb_shell="ipython_ext",
                rel_figdir="../../figures",
                rel_outdir="../tex",
-               format_opts={'width': 'linewidth'}):
+               format_opts={'width': r'\linewidth'},
+               formatter=PwebMintedPandoc):
     r''' Weave a file within the current neovim session.
 
     Parameters
@@ -57,12 +58,12 @@ def nvim_weave(outext="tex",
     rcParams['storeresults'] = docmode
     # rcParams['chunk']['defaultoptions']['engine'] = 'ipython'
 
-    pweb_formatter = PwebMintedPandoc(file=input_file,
-                                      format=outext,
-                                      shell=pweb_shell,
-                                      figdir=rcParams['figdir'],
-                                      output=output_file,
-                                      docmode=docmode)
+    pweb_formatter = formatter(file=input_file,
+                               format=outext,
+                               shell=pweb_shell,
+                               figdir=rcParams['figdir'],
+                               output=output_file,
+                               docmode=docmode)
 
     if format_opts is not None:
         pweb_formatter.updateformat(format_opts)

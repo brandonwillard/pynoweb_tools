@@ -20,7 +20,7 @@ class PwebMintedPandocFormatter(PwebTexFormatter):
             'minted_code_chunk_options',
             'xleftmargin=0.5em,mathescape')
 
-        self.minted_output_id = kwargs.pop('minted_output_id', 'output')
+        self.minted_output_id = kwargs.pop('minted_output_id', 'text')
         super(PwebMintedPandocFormatter, self).__init__(*args, **kwargs)
 
     def initformat(self):
@@ -39,32 +39,43 @@ class PwebMintedPandocFormatter(PwebTexFormatter):
                 '\n' if self.after_term_newline else ''),
             figfmt='.png',
             extension='tex',
-            width='',
+            width=r'\textwidth',
             doctype='tex')
 
     def formatfigure(self, chunk):
         fignames = chunk['figure']
         caption = chunk['caption']
-        width = chunk['width']
+        width = chunk.get('width',
+                          self.formatdict.get('width'))
         result = ""
         figstring = ""
 
         fig_root = chunk.get('fig_root', None)
+        # TODO: Get rid of `width`; no longer needed.
+        graphics_opts = chunk.get('graphics_opts', '')
 
         if chunk["f_env"] is not None:
             result += "\\begin{%s}\n" % chunk["f_env"]
 
         for fig in fignames:
-            if width is not None and width != '':
-                width_str = "[width={}]".format(width)
-            else:
-                width_str = ''
+            opts_str = ''
+            if width != '':
+                opts_str = "width={}".format(width)
+
+            if graphics_opts != '':
+                opts_str += ',' + graphics_opts
+
+            opts_str = opts_str.replace(' ', '')
+
+            if opts_str != '':
+                opts_str = "[{}]".format(opts_str)
+
             if fig_root is not None and fig_root != '':
                 import os
                 fig = os.path.basename(fig)
                 fig = os.path.join(fig_root, fig)
 
-            figstring += ("\\includegraphics%s{%s}\n" % (width_str, fig))
+            figstring += ("\\includegraphics%s{%s}\n" % (opts_str, fig))
 
         # Figure environment
         if chunk['caption']:
