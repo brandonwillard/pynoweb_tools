@@ -50,7 +50,10 @@ cleveref_dict = {r'fig:': (r'Figure~', ''),
                  r'lem:': (r'Lemma~', r'eq'),
                  r'prop:': (r'Proposition~', ''),
                  r'exa:': (r'Example~', ''),
+                 r'ex:': (r'Example~', ''),
                  r'sec:': (r'Section~', ''),
+                 r'rem:': (r'Remark~', ''),
+                 r'que:': (r'Question~', ''),
                  }
 
 cleveref_re = re.compile(
