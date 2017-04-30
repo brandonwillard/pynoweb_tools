@@ -13,15 +13,11 @@ import pypandoc
 # and https://hackage.haskell.org/package/pandoc-types-1.16.1.1 for
 # definitions.
 # Or simply `cabal get pandoc-types -d /tmp` and look at the source.
-from pandocfilters import (Str, Math, Image, Div, RawInline, Span, Para)
+from pandocfilters import (applyJSONFilters, Str, Math, Image, Div,
+                           RawInline, Span, Para)
 
-
-# logging.basicConfig(level=logging.DEBUG)
-logging.basicConfig(
-    filename='pandoc_utils_log.out',
-    filemode='w',
-    level=logging.DEBUG)
-
+pandoc_logger = logging.getLogger('pandoc_utils')
+pandoc_logger.addHandler(logging.NullHandler())
 
 gpath_pattern_1 = r'\\graphicspath\{(.+)\}'
 gpath_pattern_1 = re.compile(gpath_pattern_1)
@@ -207,9 +203,9 @@ def process_image(key, value, oformat, meta):
                                     figure_dirs,
                                     fig_fname_ext)
 
-    logging.debug("figure_dirs: {}\tfig_fname_ext: {}\n".format(
+    pandoc_logger.debug("figure_dirs: {}\tfig_fname_ext: {}\n".format(
         figure_dirs, fig_fname_ext))
-    logging.debug("new_value: {}\tnew_fig_fname: {}\n".format(
+    pandoc_logger.debug("new_value: {}\tnew_fig_fname: {}\n".format(
         new_value, new_fig_fname))
 
     # XXX: Avoid an endless loop of Image replacements.
@@ -227,7 +223,7 @@ def process_image(key, value, oformat, meta):
     try:
         fig_label_obj = value[1][-1]['c'][0][-1][0]
 
-        logging.debug("fig_label_obj: {}\n".format(fig_label_obj))
+        pandoc_logger.debug("fig_label_obj: {}\n".format(fig_label_obj))
 
         if fig_label_obj[0] == 'data-label':
             fig_label = fig_label_obj[1]
@@ -243,7 +239,7 @@ def process_image(key, value, oformat, meta):
     except:
         pass
 
-    logging.debug("wrapped_image: {}\n".format(wrapped_image))
+    pandoc_logger.debug("wrapped_image: {}\n".format(wrapped_image))
 
     return [wrapped_image]
 
@@ -309,22 +305,31 @@ def process_latex_envs(key, value, oformat, meta):
                                             ['title-name', env_title]
                                             ]]
 
-        # TODO: Should we evaluate nested environments?
-        env_body = pypandoc.convert_text(env_body, 'json',
-                                         format='latex',
-                                         filters=['PynowebFilter']
-                                         )
+        pandoc_logger.debug(u"env_body (pre-processed): {}\n".format(
+            str(env_body)))
 
-        logging.debug(u"env_body: {}\n".format(env_body))
+        # XXX: Nested processing!
+        env_body_proc = pypandoc.convert_text(env_body, 'json',
+                                              format='latex',
+                                              extra_args=(
+                                                  '-s', '-R',
+                                                  '--wrap=none'),
+                                              )
 
-        div_blocks = json.loads(env_body)['blocks']
+        pandoc_logger.debug(u"env_body (pandoc processed): {}\n".format(
+            env_body_proc))
+
+        env_body_filt = applyJSONFilters(
+            [latex_prefilter], env_body_proc, format='json')
+
+        div_blocks = json.loads(env_body_filt)['blocks']
 
         if label_div is not None:
             div_blocks = [label_div] + div_blocks
 
         div_res = Div(div_attr, div_blocks)
 
-        logging.debug("div_res: {}\n".format(div_res))
+        pandoc_logger.debug("div_res: {}\n".format(div_res))
 
         return div_res
     else:
@@ -355,9 +360,9 @@ def latex_prefilter(key, value, oformat, meta, *args, **kwargs):
     TODO: Document parameters.
 
     """
-    # logging.debug((u"Filter key:{}, value:{}, meta:{},"
-    #                "args:{}, kwargs:{}\n").format(
-    #                    key, value, meta, args, kwargs))
+    pandoc_logger.debug((u"Filter key:{}, value:{}, meta:{},"
+                   "args:{}, kwargs:{}\n").format(
+                       key, value, meta, args, kwargs))
 
     global custom_inline_math, preserved_tex,\
         env_conversions, figure_dirs, fig_fname_ext
@@ -391,7 +396,7 @@ def latex_prefilter(key, value, oformat, meta, *args, **kwargs):
 
             new_value = reduce(repstep, figure_files, new_value)
 
-            logging.debug("figure_files: {}\tnew_value: {}\n".format(
+            pandoc_logger.debug("figure_files: {}\tnew_value: {}\n".format(
                 figure_files, new_value))
 
             for from_, to_ in custom_inline_math.items():

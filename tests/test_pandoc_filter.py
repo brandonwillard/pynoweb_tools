@@ -20,9 +20,27 @@ TODO FIXME: Rewrite all tests using calls like:
 '''
 import os
 
+import logging
+
+import json
 # import pytest
+
 import pandocfilters
 import pypandoc
+
+import pynoweb_tools.pandoc_utils
+from pynoweb_tools.pandoc_utils import latex_prefilter
+
+# logging.basicConfig(level=logging.DEBUG)
+logging.basicConfig(
+    filename='test_pandoc_utils.log',
+    filemode='w',
+    level=logging.DEBUG)
+
+# pandoc_logger = logging.getLogger('pandoc_utils')
+# fh = logging.FileHandler('test_pandoc_utils.log')
+# fh.setLevel(logging.DEBUG)
+# pandoc_logger.addHandler(fh)
 
 
 def debug_example():
@@ -67,7 +85,6 @@ def debug_example():
     # filter_res = json.dumps(json_json_res)
 
     # Apply our filter...
-    import pynoweb_tools.pandoc_utils
     # Make sure we clear out the global(s)...
     pynoweb_tools.pandoc_utils.processed_figures = dict()
     from pynoweb_tools.pandoc_utils import latex_prefilter
@@ -272,9 +289,63 @@ def test_nested_envir():
                    r' markdown="" env-number="1" title-name="">')
     assert div_env_str in pandoc_res
 
-    # Make sure nexted markdown was actually processed.
+    # Make sure nested markdown was actually processed.
     div_nested_md_str = r'Blah, blah, blah *some more text*'
     assert div_nested_md_str in pandoc_res
+
+
+def test_nested_envir_2():
+    test_file_exa = r'''
+    \begin{document}
+
+    \begin{lemma}
+        \label{lem:a_lemma}
+        \begin{equation}
+            1 = 1
+        \end{equation}
+        \begin{proof}
+            Obviously true!
+        \end{proof}
+    \end{lemma}
+
+    \begin{remark}
+        \label{rem:a_remark}
+        The property in \Cref{lem:a_lemma} can used with other\dots
+    \end{remark}
+
+    \end{document}
+    '''
+    json_res = pypandoc.convert_text(test_file_exa,
+                                     # 'markdown_github+markdown_in_html_blocks',
+                                     'json',
+                                     format='latex',
+                                     extra_args=('-s', '-R', '--wrap=none'),
+                                     )
+    # json_json_res = json.loads(json_res)
+
+    pynoweb_tools.pandoc_utils.processed_figures = dict()
+
+    filter_res = pandocfilters.applyJSONFilters(
+        [latex_prefilter], json_res, format='json')
+
+    # filter_json_res = json.loads(filter_res)
+
+    pandoc_res = pypandoc.convert_text(filter_res,
+                                       'markdown_github+markdown_in_html_blocks',
+                                       format='json',
+                                       extra_args=('-s', '-R', '--wrap=none'),
+                                       )
+
+    # print(pandoc_res)
+
+    # Make sure our nested div environments made it into the output.
+    div_env_str = (r'<div class="proof" markdown="" env-number="1"'
+                   r' title-name="">')
+    assert div_env_str in pandoc_res
+
+    # Make sure our nested lemma reference made it in.
+    div_lemma_str = r'Lemma $\\eqref{lem:a\_lemma}$ '
+    assert div_lemma_str in pandoc_res
 
 
 def test_citations():
