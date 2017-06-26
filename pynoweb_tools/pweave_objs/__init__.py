@@ -1,6 +1,6 @@
 from pweave import (PwebFormats, PwebProcessors)
 from .processors import (PwebIPythonExtProcessor, JupyterAwareProcessor)
-from .formatters import PwebMintedPandocFormatter
+from .formatters import (PwebMintedPandocFormatter, PwebMintedPandoc)
 
 
 PwebFormats.formats.update(
