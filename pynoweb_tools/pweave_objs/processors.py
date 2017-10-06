@@ -20,14 +20,14 @@ from tornado.gen import TimeoutError
 from jupyter_client.blocking import BlockingKernelClient
 from jupyter_client.manager import start_new_kernel
 
-from pweave import PwebProcessor
+from pweave.processors.base import PwebProcessorBase
 # from pweave import subsnippets, config
 
 from nbformat.v4 import output_from_msg
 # from IPython.core import inputsplitter
 
 
-class PwebIPythonExtProcessor(PwebProcessor):
+class PwebIPythonExtProcessor(PwebProcessorBase):
     r""" A processor that runs code chunks in the current Ipython session.
     If there isn't one, then it creates one.
     """
@@ -137,7 +137,7 @@ class PwebIPythonExtProcessor(PwebProcessor):
         return ''.join(splitted)
 
 
-class JupyterAwareProcessor(PwebProcessor):
+class JupyterAwareProcessor(PwebProcessorBase):
     r""" This processor checks for existing Jupyter/IPython kernels
     in the currently running session.
     """

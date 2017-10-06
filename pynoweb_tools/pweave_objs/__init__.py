@@ -1,14 +1,15 @@
 from pweave import (PwebFormats, PwebProcessors)
 from .processors import (PwebIPythonExtProcessor, JupyterAwareProcessor)
-from .formatters import (PwebMintedPandocFormatter, PwebMintedPandoc)
+from .formatters import PwebMintedPandocFormatter
 
 
 PwebFormats.formats.update(
     {
-        'pweb_minted_pandoc':
+        'texmintedpandoc':
         {'class': PwebMintedPandocFormatter,
          'description':
-         ('Minted environs with Pandoc and Pelican figure output considerations.')
+         ('Minted code environments with Pandoc and Pelican '
+          'figure output formatting.')
          }
     })
 

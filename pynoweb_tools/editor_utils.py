@@ -43,6 +43,9 @@ def nvim_weave(outext="tex",
     nvim = neovim.attach('socket', path=os.getenv("NVIM_LISTEN_ADDRESS"))
     currbuf = nvim.current.buffer
 
+    # TODO: If params are None, check for them in Vim.
+    # E.g. b:latex_build_dir, b:latex_figures_dir, b:latex_pdf_file
+
     from pweave import rcParams
 
     project_dir, input_file = os.path.split(currbuf.name)
