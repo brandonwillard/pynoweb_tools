@@ -1,11 +1,13 @@
 import sys
+import os
 from optparse import OptionParser
 
+import pweave
 from pweave import rcParams
 
 from pandocfilters import toJSONFilter
 
-from .pweave_objs.formatters import PwebMintedPandoc
+from .pweave_objs.formatters import PwebMintedPandocFormatter
 from .utils import weave_retry_cache
 from .pandoc_utils import latex_prefilter
 
@@ -16,6 +18,9 @@ def weave():
 
     TODO: Much of this isn't needed anymore, so refactor.  Especially
     since the retry stuff should just be in a `Pweave.Processor`.
+
+    Could we use `os.execvp('Pweave', ['Pweave'] + opts)`?
+
     """
 
     if len(sys.argv) == 1:
@@ -43,10 +48,10 @@ def weave():
                       dest="output",
                       default=None,
                       help="Path and filename for output file")
-    parser.add_option("-s", "--shell",
-                      dest="shell",
-                      default="ipython_ext",
-                      help="Shell in which to process python")
+    parser.add_option("-k", "--kernel",
+                      dest="kernel",
+                      default="python3",
+                      help="Jupyter kernel in which to process code")
 
     (options, args) = parser.parse_args()
 
@@ -61,17 +66,36 @@ def weave():
     rcParams['figdir'] = opts_dict.pop('figdir', None)
     rcParams['storeresults'] = opts_dict.pop('cache', None)
     rcParams["chunk"]["defaultoptions"].update({'wrap': False})
-    # rcParams['chunk']['defaultoptions']['engine'] = 'ipython'
-    shell_opt = opts_dict.pop('shell')
 
-    pweb_formatter = PwebMintedPandoc(infile,
-                                      format="tex",
-                                      shell=shell_opt,
-                                      figdir=rcParams['figdir'],
-                                      output=opts_dict.pop('output', None),
-                                      docmode=opts_dict.pop('docmode', None))
+    weave_kernel = opts_dict.pop('kernel')
 
-    weave_retry_cache(pweb_formatter)
+    # pweb_formatter = PwebMintedPandoc(infile,
+    #                                   format="tex",
+    #                                   shell=shell_opt,
+    #                                   figdir=rcParams['figdir'],
+    #                                   output=opts_dict.pop('output', None),
+    #                                   docmode=opts_dict.pop('docmode', None))
+
+    out_file = opts_dict.pop('output', None)
+    out_dir, out_filename = os.path.split(out_file)
+    _, out_filename_ext = os.path.splitext(out_filename)
+
+    weaver = pweave.Pweb(infile,
+                         doctype=out_filename_ext[1:],
+                         kernel=weave_kernel,
+                         # XXX: Pydoc is super confusing; this
+                         # should be the output dir and filename.
+                         output=out_file,
+                         figdir=rcParams['figdir'])
+
+    weaver.documentationmode = opts_dict.pop('docmode', None)
+
+    weaver.setformat(Formatter=PwebMintedPandocFormatter)
+
+    # if weave_format_opts is not None:
+    #     weaver.updateformat(weave_format_opts)
+
+    weave_retry_cache(weaver)
 
 
 def latex_json_filter():

@@ -100,7 +100,7 @@ class PwebMintedPandocFormatter(PwebTexFormatter):
 class PwebMintedPandoc(Pweb):
 
     def __init__(self, *args, **kwargs):
-        docmode = kwargs.pop('docmode', None)
+        # docmode = kwargs.pop('docmode', None)
 
         super(PwebMintedPandoc, self).__init__(*args, **kwargs)
 
@@ -108,4 +108,4 @@ class PwebMintedPandoc(Pweb):
         #self.sink = os.path.join(self.output,
         #                         os.path.basename(self._basename()) + '.' +
         #                         self.formatter.getformatdict()['extension'])
-        self.documentationmode = docmode
+        # self.documentationmode = docmode
