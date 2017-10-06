@@ -36,9 +36,6 @@ setup(name='pynoweb_tools',
       dependency_links=[
         'git+ssh://git@github.com/jgm/pandocfilters.git',
       ],
-      extra_require={
-          'neovim': ['neovim', ],
-      },
       entry_points={
           'console_scripts':
               ['PynowebWeave = pynoweb_tools.scripts:weave',
