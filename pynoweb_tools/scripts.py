@@ -86,7 +86,8 @@ def weave():
                          # XXX: Pydoc is super confusing; this
                          # should be the output dir and filename.
                          output=out_file,
-                         figdir=rcParams['figdir'])
+                         figdir=rcParams['figdir'],
+                         kernel_args={'embed_kernel': False})
 
     weaver.documentationmode = opts_dict.pop('docmode', None)
 

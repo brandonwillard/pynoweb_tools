@@ -12,13 +12,13 @@ class PwebMintedPandocFormatter(PwebTexFormatter):
         self.after_term_newline = kwargs.pop('after_term_newline', True)
 
         self.minted_code_chunk_options = kwargs.pop(
-            'minted_code_chunk_options', 'mathescape,xleftmargin=0.5em')
+            'minted_code_chunk_options', 'xleftmargin=0.5em')
         self.minted_output_chunk_options = kwargs.pop(
             'minted_code_chunk_options',
-            'xleftmargin=0.5em,mathescape,frame=leftline')
+            'xleftmargin=0.5em,frame=leftline')
         self.minted_term_chunk_options = kwargs.pop(
             'minted_code_chunk_options',
-            'xleftmargin=0.5em,mathescape')
+            'xleftmargin=0.5em')
 
         self.minted_output_id = kwargs.pop('minted_output_id', 'text')
         super(PwebMintedPandocFormatter, self).__init__(*args, **kwargs)

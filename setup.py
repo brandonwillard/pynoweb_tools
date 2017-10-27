@@ -34,7 +34,8 @@ setup(name='pynoweb_tools',
                         'nbformat'
                         ],
       dependency_links=[
-        'git+ssh://git@github.com/jgm/pandocfilters.git',
+          'git+https://github.com/brandonwillard/Pweave.git#egg=pweave',
+          'git+https://github.com/jgm/pandocfilters.git',
       ],
       entry_points={
           'console_scripts':
